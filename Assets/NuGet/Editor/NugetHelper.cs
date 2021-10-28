@@ -1,4 +1,6 @@
-﻿namespace NugetForUnity
+﻿using System.Reflection;
+
+namespace NugetForUnity
 {
     using System;
     using System.Collections.Generic;
@@ -378,10 +380,6 @@
 
             // For now, delete src.  We may use it later...
             DeleteDirectory(packageInstallDirectory + "/src");
-
-            // Since we don't automatically fix up the runtime dll platforms, remove them until we improve support
-            // for this newer feature of nuget packages.
-            DeleteDirectory(Path.Combine(packageInstallDirectory, "runtimes"));
 
             // Delete documentation folders since they sometimes have HTML docs with JavaScript, which Unity tried to parse as "UnityScript"
             DeleteDirectory(packageInstallDirectory + "/docs");
@@ -1234,7 +1232,7 @@
         /// </summary>
         /// <param name="package">The identifer of the package to install.</param>
         /// <param name="refreshAssets">True to refresh the Unity asset database.  False to ignore the changes (temporarily).</param>
-        internal static bool InstallIdentifier(NugetPackageIdentifier package, bool refreshAssets = true)
+        public static bool InstallIdentifier(NugetPackageIdentifier package, bool refreshAssets = true)
         {
             if (IsAlreadyImportedInEngine(package))
             {
@@ -1278,6 +1276,75 @@
 #else
                 Application.stackTraceLogType = stackTraceLogType;
 #endif
+            }
+        }
+
+        private static Dictionary<string, List<BuildTarget>> TargetRuntimes =
+            new Dictionary<string, List<BuildTarget>>()
+            {
+                {"win7-x64", new List<BuildTarget> {BuildTarget.StandaloneWindows64}},
+                {"win7-x86", new List<BuildTarget> {BuildTarget.StandaloneWindows}},
+                {"win-x64", new List<BuildTarget> {BuildTarget.StandaloneWindows64}},
+                {"win-x86", new List<BuildTarget> {BuildTarget.StandaloneWindows}},
+                {"linux-x64", new List<BuildTarget> {BuildTarget.StandaloneLinux64}},
+                {"osx-x64", new List<BuildTarget> {BuildTarget.StandaloneOSX}},
+            };
+
+        private static List<BuildTarget> NotObsoleteBuildTargets = typeof(BuildTarget)
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(fieldInfo => fieldInfo.GetCustomAttribute(typeof(ObsoleteAttribute)) == null)
+            .Select(fieldInfo => (BuildTarget) fieldInfo.GetValue(null))
+            .ToList();
+
+        /// <summary>
+        /// Import and set compatability on native files within the runtimes folder of a NuGet package.
+        /// </summary>
+        /// <param name="package">Package to process</param>
+        /// <param name="runtimeDirectory">NuGet packages runtimes folder</param>
+        private static void HandleRuntimes(NugetPackageIdentifier package, string runtimeDirectory)
+        {
+            var runtimes = Directory.GetDirectories(runtimeDirectory);
+
+            foreach (var runtimeDir in runtimes)
+            {
+                var platform = new DirectoryInfo(runtimeDir).Name;
+
+                if (!TargetRuntimes.ContainsKey(platform))
+                {
+                    LogVerbose("Runtime {0} of package {1} is not supported", platform, package);
+                    Directory.Delete(runtimeDir, true);
+                    continue;
+                }
+
+                var compatibleTargets = TargetRuntimes[platform];
+                var incompatibleTargets = NotObsoleteBuildTargets.Except(compatibleTargets).ToList();
+
+                var nativeFiles = Directory.GetFiles(Path.Combine(runtimeDir, "native"));
+                foreach (var nativeFile in nativeFiles)
+                {
+                    var projectRelativePath =
+                        nativeFile.Substring(new DirectoryInfo(Application.dataPath).Parent.FullName.Length + 1);
+                    AssetDatabase.ImportAsset(projectRelativePath, ImportAssetOptions.ForceSynchronousImport);
+                    PluginImporter plugin = AssetImporter.GetAtPath(projectRelativePath) as PluginImporter;
+
+                    if (plugin == null)
+                    {
+                        Debug.LogWarning(string.Format("Native file {0} of package {1} failed to import", nativeFile,
+                            package));
+                        continue;
+                    }
+
+                    LogVerbose("Runtime {0} of package {1} compatability set to {2}", platform, package,
+                        string.Join(",", compatibleTargets));
+                    incompatibleTargets.ForEach(target => plugin.SetExcludeFromAnyPlatform(target, true));
+                    compatibleTargets.ForEach(target => plugin.SetExcludeFromAnyPlatform(target, false));
+
+                    incompatibleTargets.ForEach(target => plugin.SetCompatibleWithPlatform(target, false));
+                    compatibleTargets.ForEach(target => plugin.SetCompatibleWithPlatform(target, true));
+                    plugin.SetCompatibleWithEditor(true);
+
+                    plugin.SaveAndReimport();
+                }
             }
         }
 
@@ -1392,9 +1459,9 @@
                     EditorUtility.DisplayProgressBar(string.Format("Installing {0} {1}", package.Id, package.Version), "Extracting Package", 0.6f);
                 }
 
+                string baseDirectory = Path.Combine(NugetConfigFile.RepositoryPath, string.Format("{0}.{1}", package.Id, package.Version));
                 if (File.Exists(cachedPackagePath))
                 {
-                    string baseDirectory = Path.Combine(NugetConfigFile.RepositoryPath, string.Format("{0}.{1}", package.Id, package.Version));
 
                     // unzip the package
                     using (ZipArchive zip = ZipFile.OpenRead(cachedPackagePath))
@@ -1427,6 +1494,13 @@
                 if (refreshAssets)
                 {
                     EditorUtility.DisplayProgressBar(string.Format("Installing {0} {1}", package.Id, package.Version), "Cleaning Package", 0.9f);
+                }
+
+                var runtimeDirectory = Path.Combine(baseDirectory, "runtimes");
+                if (Directory.Exists(runtimeDirectory))
+                {
+                    LogVerbose("Package {0} has a runtime folder", package);
+                    HandleRuntimes(package, runtimeDirectory);
                 }
 
                 // clean
@@ -1635,7 +1709,7 @@
         /// </summary>
         /// <param name="package">The package to check if is installed.</param>
         /// <returns>True if the given package is installed.  False if it is not.</returns>
-        internal static bool IsInstalled(NugetPackageIdentifier package)
+        public static bool IsInstalled(NugetPackageIdentifier package)
         {
             if (IsAlreadyImportedInEngine(package))
             {
