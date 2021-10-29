@@ -1284,17 +1284,6 @@ namespace NugetForUnity
             }
         }
 
-        private static Dictionary<string, List<BuildTarget>> TargetRuntimes =
-            new Dictionary<string, List<BuildTarget>>()
-            {
-                {"win7-x64", new List<BuildTarget> {BuildTarget.StandaloneWindows64}},
-                {"win7-x86", new List<BuildTarget> {BuildTarget.StandaloneWindows}},
-                {"win-x64", new List<BuildTarget> {BuildTarget.StandaloneWindows64}},
-                {"win-x86", new List<BuildTarget> {BuildTarget.StandaloneWindows}},
-                {"linux-x64", new List<BuildTarget> {BuildTarget.StandaloneLinux64}},
-                {"osx-x64", new List<BuildTarget> {BuildTarget.StandaloneOSX}},
-            };
-
         private static List<BuildTarget> NotObsoleteBuildTargets = typeof(BuildTarget)
             .GetFields(BindingFlags.Public | BindingFlags.Static)
             .Where(fieldInfo => fieldInfo.GetCustomAttribute(typeof(ObsoleteAttribute)) == null)
@@ -1317,15 +1306,14 @@ namespace NugetForUnity
             foreach (var runtimeDir in runtimes)
             {
                 var platform = new DirectoryInfo(runtimeDir).Name;
-
-                if (!TargetRuntimes.ContainsKey(platform))
+                if (!NugetConfigFile.NativeRuntimesMappings.ContainsKey(platform))
                 {
                     LogVerbose("Runtime {0} of package {1} is not supported", platform, package);
                     Directory.Delete(runtimeDir, true);
                     continue;
                 }
 
-                var compatibleTargets = TargetRuntimes[platform];
+                var compatibleTargets = NugetConfigFile.NativeRuntimesMappings[platform];
                 var incompatibleTargets = NotObsoleteBuildTargets.Except(compatibleTargets).ToList();
 
                 var nativeFiles = Directory.GetFiles(Path.Combine(runtimeDir, "native"));

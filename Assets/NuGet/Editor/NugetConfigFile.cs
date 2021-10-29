@@ -1,4 +1,6 @@
-﻿namespace NugetForUnity
+﻿using UnityEngine;
+
+namespace NugetForUnity
 {
     using System;
     using System.Collections.Generic;
@@ -49,6 +51,11 @@
         /// Gets or sets a value indicating whether installed package files are set to read-only.
         /// </summary>
         public bool ReadOnlyPackageFiles { get; set; }
+
+        /// <summary>
+        /// Gets or sets the mapping from NuGet runtimes folder naming convention to Unity BuildTargets
+        /// </summary>
+        public Dictionary<string, List<BuildTarget>> NativeRuntimesMappings { get; set; }
 
         /// <summary>
         /// The incomplete path that is saved.  The path is expanded and made public via the property above.
@@ -150,12 +157,28 @@
                 config.Add(addElement);
             }
 
+            XElement nativeRuntimesMapping = new XElement("nativeRuntimesMapping");
+            foreach (var mapping in NativeRuntimesMappings)
+            {
+                var platform = new XElement("platform");
+                platform.Add(new XAttribute("name", mapping.Key));
+
+                foreach (var target in mapping.Value)
+                {
+                    var buildTarget = new XElement("buildTarget");
+                    buildTarget.Add(new XAttribute("name", target.ToString()));
+                    platform.Add(buildTarget);
+                }
+                nativeRuntimesMapping.Add(platform);
+            }
+
             XElement configuration = new XElement("configuration");
             configuration.Add(packageSources);
             configuration.Add(disabledPackageSources);
             configuration.Add(packageSourceCredentials);
             configuration.Add(activePackageSource);
             configuration.Add(config);
+            configuration.Add(nativeRuntimesMapping);
 
             configFile.Add(configuration);
 
@@ -188,6 +211,16 @@
             configFile.PackageSources = new List<NugetPackageSource>();
             configFile.InstallFromCache = true;
             configFile.ReadOnlyPackageFiles = false;
+            configFile.NativeRuntimesMappings =
+                new Dictionary<string, List<BuildTarget>>()
+                {
+                    {"win7-x64", new List<BuildTarget> {BuildTarget.StandaloneWindows64}},
+                    {"win7-x86", new List<BuildTarget> {BuildTarget.StandaloneWindows}},
+                    {"win-x64", new List<BuildTarget> {BuildTarget.StandaloneWindows64}},
+                    {"win-x86", new List<BuildTarget> {BuildTarget.StandaloneWindows}},
+                    {"linux-x64", new List<BuildTarget> {BuildTarget.StandaloneLinux64}},
+                    {"osx-x64", new List<BuildTarget> {BuildTarget.StandaloneOSX}},
+                };
 
             XDocument file = XDocument.Load(filePath);
 
@@ -301,6 +334,35 @@
                     {
                         configFile.ReadOnlyPackageFiles = bool.Parse(value);
                     }
+                }
+            }
+            
+            // Read native runtime mappings
+            XElement nativeRuntimesMapping = file.Root.Element("nativeRuntimesMapping");
+            if (nativeRuntimesMapping != null)
+            {
+                configFile.NativeRuntimesMappings = new Dictionary<string, List<BuildTarget>>();
+                var platforms = nativeRuntimesMapping.Elements("platform");
+                foreach (var platform in platforms)
+                {
+                    var platformName = platform.Attribute("name").Value;
+                    var buildTargets = new List<BuildTarget>();
+                    var targets = platform.Elements("buildTarget");
+                    
+                    foreach (var target in targets)
+                    {
+                        var targetName = target.Attribute("name").Value;
+                        BuildTarget parsedTarget;
+                        if (BuildTarget.TryParse(targetName, true, out parsedTarget))
+                        {
+                            buildTargets.Add(parsedTarget);
+                        }
+                        else
+                        {
+                            Debug.LogWarning(string.Format("{0} of {1} not found", targetName, platformName));
+                        }
+                    }
+                    configFile.NativeRuntimesMappings.Add(platformName, buildTargets);
                 }
             }
 
