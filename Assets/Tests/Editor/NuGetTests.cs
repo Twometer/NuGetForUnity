@@ -1,11 +1,7 @@
-﻿using System;
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using NugetForUnity;
 using System.IO;
-using System.Runtime.InteropServices;
 using UnityEditor;
-using UnityEngine;
-using Object = System.Object;
 
 public class NuGetTests
 {
@@ -56,37 +52,6 @@ public class NuGetTests
         NugetHelper.UninstallAll();
         Assert.IsFalse(NugetHelper.IsInstalled(protobuf), "The package is STILL installed: {0} {1}", protobuf.Id, protobuf.Version);
     }
-
-    [Test]
-    public void InstallAndRunSqlite()
-    {
-        var sqlite = new NugetPackageIdentifier("SQLite.Native", "3.12.3");
-        try
-        {
-            // install the package
-            NugetHelper.InstallIdentifier(sqlite);
-            Assert.IsTrue(NugetHelper.IsInstalled(sqlite), "The package was NOT installed: {0} {1}", sqlite.Id,
-                sqlite.Version);
-
-            // Test the runtime
-            var version = Marshal.PtrToStringAuto(sqlite3_libversion());
-            Assert.That(version, Is.EqualTo(sqlite.Version));
-        }
-        finally
-        {
-            // uninstall the package
-            NugetHelper.UninstallAll();
-            Assert.IsFalse(NugetHelper.IsInstalled(sqlite), "The packages are STILL installed: {0} {1}", sqlite.Id,
-                sqlite.Version);
-        }
-    }
-
-    /// <summary>
-    /// Call to the SQLite native file
-    /// </summary>
-    /// <returns></returns>
-    [DllImport("sqlite3")]
-    private static extern IntPtr sqlite3_libversion();
 
     [Test]
     public void InstallBootstrapCSSTest()

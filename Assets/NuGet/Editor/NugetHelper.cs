@@ -1,5 +1,10 @@
 ﻿using System.Reflection;
+using System.Runtime.CompilerServices;
 
+// To support play mode testing we have to use assembly defs, so to keep the methods internal we'll make
+// the test assemblies able to see the internal methods
+[assembly: InternalsVisibleTo("PlayTest")]
+[assembly: InternalsVisibleTo("Assembly-CSharp-Editor")] // Default unity assembly with editor code/tests
 namespace NugetForUnity
 {
     using System;
@@ -1232,7 +1237,7 @@ namespace NugetForUnity
         /// </summary>
         /// <param name="package">The identifer of the package to install.</param>
         /// <param name="refreshAssets">True to refresh the Unity asset database.  False to ignore the changes (temporarily).</param>
-        public static bool InstallIdentifier(NugetPackageIdentifier package, bool refreshAssets = true)
+        internal static bool InstallIdentifier(NugetPackageIdentifier package, bool refreshAssets = true)
         {
             if (IsAlreadyImportedInEngine(package))
             {
@@ -1298,13 +1303,17 @@ namespace NugetForUnity
 
         /// <summary>
         /// Import and set compatability on native files within the runtimes folder of a NuGet package.
+        /// 
+        /// * Unsupported platforms/architectures are deleted
+        /// * Set all excludes for all non-deprecated BuildTargets
+        /// * Set all compatability for all non-deprecated BuildTargets
         /// </summary>
         /// <param name="package">Package to process</param>
         /// <param name="runtimeDirectory">NuGet packages runtimes folder</param>
         private static void HandleRuntimes(NugetPackageIdentifier package, string runtimeDirectory)
         {
             var runtimes = Directory.GetDirectories(runtimeDirectory);
-
+            
             foreach (var runtimeDir in runtimes)
             {
                 var platform = new DirectoryInfo(runtimeDir).Name;
@@ -1322,11 +1331,13 @@ namespace NugetForUnity
                 var nativeFiles = Directory.GetFiles(Path.Combine(runtimeDir, "native"));
                 foreach (var nativeFile in nativeFiles)
                 {
+                    // Trigger Unity to create the meta file, the path for ImportAsset MUST be relative to the project
+                    // path
                     var projectRelativePath =
                         nativeFile.Substring(new DirectoryInfo(Application.dataPath).Parent.FullName.Length + 1);
                     AssetDatabase.ImportAsset(projectRelativePath, ImportAssetOptions.ForceSynchronousImport);
                     PluginImporter plugin = AssetImporter.GetAtPath(projectRelativePath) as PluginImporter;
-
+                    
                     if (plugin == null)
                     {
                         Debug.LogWarning(string.Format("Native file {0} of package {1} failed to import", nativeFile,
@@ -1334,7 +1345,7 @@ namespace NugetForUnity
                         continue;
                     }
 
-                    LogVerbose("Runtime {0} of package {1} compatability set to {2}", platform, package,
+                    LogVerbose("Runtime {0} of package {1} setting compatability to {2}", platform, package,
                         string.Join(",", compatibleTargets));
                     incompatibleTargets.ForEach(target => plugin.SetExcludeFromAnyPlatform(target, true));
                     compatibleTargets.ForEach(target => plugin.SetExcludeFromAnyPlatform(target, false));
@@ -1343,7 +1354,9 @@ namespace NugetForUnity
                     compatibleTargets.ForEach(target => plugin.SetCompatibleWithPlatform(target, true));
                     plugin.SetCompatibleWithEditor(true);
 
+                    // Persist and reload the change to the meta file
                     plugin.SaveAndReimport();
+                    LogVerbose("Runtime {0} of package {1} compatability set", platform, package);
                 }
             }
         }
@@ -1709,7 +1722,7 @@ namespace NugetForUnity
         /// </summary>
         /// <param name="package">The package to check if is installed.</param>
         /// <returns>True if the given package is installed.  False if it is not.</returns>
-        public static bool IsInstalled(NugetPackageIdentifier package)
+        internal static bool IsInstalled(NugetPackageIdentifier package)
         {
             if (IsAlreadyImportedInEngine(package))
             {
