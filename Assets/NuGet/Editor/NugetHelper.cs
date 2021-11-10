@@ -1287,7 +1287,7 @@ namespace NugetForUnity
         private static List<BuildTarget> NotObsoleteBuildTargets = typeof(BuildTarget)
             .GetFields(BindingFlags.Public | BindingFlags.Static)
             .Where(fieldInfo => fieldInfo.GetCustomAttribute(typeof(ObsoleteAttribute)) == null)
-            .Select(fieldInfo => (BuildTarget) fieldInfo.GetValue(null))
+            .Select(fieldInfo => (BuildTarget)fieldInfo.GetValue(null))
             .ToList();
 
         /// <summary>
@@ -1302,7 +1302,7 @@ namespace NugetForUnity
         private static void HandleRuntimes(NugetPackageIdentifier package, string runtimeDirectory)
         {
             var runtimes = Directory.GetDirectories(runtimeDirectory);
-            
+
             foreach (var runtimeDir in runtimes)
             {
                 var platform = new DirectoryInfo(runtimeDir).Name;
@@ -1324,8 +1324,10 @@ namespace NugetForUnity
                     var projectRelativePath =
                         nativeFile.Substring(new DirectoryInfo(Application.dataPath).Parent.FullName.Length + 1);
                     AssetDatabase.ImportAsset(projectRelativePath, ImportAssetOptions.ForceSynchronousImport);
+                    var assimp = AssetImporter.GetAtPath(projectRelativePath);
+                    Debug.Log("Importing " + projectRelativePath + " into " + assimp.GetType().Name);
                     PluginImporter plugin = AssetImporter.GetAtPath(projectRelativePath) as PluginImporter;
-                    
+
                     if (plugin == null)
                     {
                         Debug.LogWarning(string.Format("Native file {0} of package {1} failed to import", nativeFile,
@@ -1333,17 +1335,35 @@ namespace NugetForUnity
                         continue;
                     }
 
+
                     LogVerbose("Runtime {0} of package {1} setting compatability to {2}", platform, package,
                         string.Join(",", compatibleTargets));
+
+                    Debug.Log(string.Format("Runtime {0} of package {1} setting compatability to {2}, incompatibility to {3}", platform, package,
+                        string.Join(",", compatibleTargets), string.Join(",", incompatibleTargets)));
+
+                    plugin.SetCompatibleWithEditor(true);
+                    plugin.SetCompatibleWithAnyPlatform(false);
+
                     incompatibleTargets.ForEach(target => plugin.SetExcludeFromAnyPlatform(target, true));
                     compatibleTargets.ForEach(target => plugin.SetExcludeFromAnyPlatform(target, false));
 
                     incompatibleTargets.ForEach(target => plugin.SetCompatibleWithPlatform(target, false));
                     compatibleTargets.ForEach(target => plugin.SetCompatibleWithPlatform(target, true));
-                    plugin.SetCompatibleWithEditor(true);
+
+                    if (compatibleTargets.Contains(BuildTarget.StandaloneWindows))
+                    {
+                        plugin.SetEditorData("CPU", "x86");
+                    }
+                    else if (compatibleTargets.Contains(BuildTarget.StandaloneWindows64))
+                    {
+                        plugin.SetEditorData("CPU", "x86_64");
+                    }
 
                     // Persist and reload the change to the meta file
                     plugin.SaveAndReimport();
+                    AssetDatabase.Refresh();
+
                     LogVerbose("Runtime {0} of package {1} compatability set", platform, package);
                 }
             }

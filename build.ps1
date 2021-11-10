@@ -7,9 +7,10 @@ Write-Host "Build NuGetForUnity " -ForegroundColor Green
 
 # Determine the Unity path for importing project references
 $projectVersion = Get-UnityProjectInstance -BasePath ".\Packager" | Select-Object -ExpandProperty Version
-$unityPath = Get-UnitySetupInstance | 
-    Select-UnitySetupInstance -Version $projectVersion | 
-    Select-Object -ExpandProperty Path
+$unityInstance = Get-UnitySetupInstance -BasePath "D:\Software\Unity" | 
+    Select-UnitySetupInstance -Version $projectVersion
+    
+$unityPath = $unityInstance | Select-Object -ExpandProperty Path
 if ( !$unityPath -or $unityPath -eq "" ) {
     throw "Could not find Unity editor for $projectVersion"
 }
@@ -40,7 +41,7 @@ if ( $LASTEXITCODE -ne 0 ) {
 Copy-Item ".\CreateDLL\bin\Release\NugetForUnity.dll" ".\Packager\Assets\NuGet\Editor"
 
 # Launch Unity to export the NuGetForUnity package
-Start-UnityEditor -Project ".\Packager" -BatchMode -Quit -Wait -ExecuteMethod "NugetForUnity.Export.Execute" -LogFile ".\Packager\NuGetForUnity.unitypackage.log"
+$unityInstance | Start-UnityEditor -BatchMode -Quit -Wait -ExecuteMethod "NugetForUnity.Export.Execute" -LogFile ".\Packager\NuGetForUnity.unitypackage.log"
 
 # Copy artifacts to output directory
 if ( !(Test-Path $OutputDirectory) ) { New-Item -ItemType Directory $OutputDirectory }

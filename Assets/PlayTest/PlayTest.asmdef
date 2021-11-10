@@ -1,0 +1,12 @@
+{
+    "name": "PlayTest",
+    "references": [
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner",
+        "NuGetForUnity",
+		"TestAssemblies"
+    ],
+	"optionalUnityReferences": [
+		"TestAssemblies"
+	]
+}

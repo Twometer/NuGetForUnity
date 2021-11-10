@@ -6,8 +6,6 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 
-[assembly: PrebuildSetup(typeof(NuGetPlayTests))]
-[assembly: PostBuildCleanup(typeof(NuGetPlayTests))]
 /// <summary>
 /// Play mode tests allow us to install NuGet packages with Native code before play mode starts, then when play mode
 /// runs the native libraries are available for use.
@@ -15,7 +13,7 @@ using UnityEngine.TestTools;
 /// There seems to be some Unity internals that prevents an edit mode test from adding a Native library and finding it
 /// in the same run. 
 /// </summary>
-public class NuGetPlayTests : IPrebuildSetup, IPostBuildCleanup
+public class NuGetPlayTestsNoUninstall : IPrebuildSetup, IPostBuildCleanup
 {
     NugetPackageIdentifier sqlite = new NugetPackageIdentifier("SQLitePCLRaw.lib.e_sqlite3", "2.0.7");
     // Version of the SQLite library does not match the NuGet package version
@@ -56,10 +54,5 @@ public class NuGetPlayTests : IPrebuildSetup, IPostBuildCleanup
 
     public void Cleanup()
     {
-        // Need to reinitialise NugetHelper, but not sure why
-        NugetHelper.LoadNugetConfigFile();
-        NugetHelper.Uninstall(sqlite);
-        Assert.IsFalse(NugetHelper.IsInstalled(sqlite), "The packages are STILL installed: {0} {1}", sqlite.Id,
-            sqlite.Version);
     }
 }
